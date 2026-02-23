@@ -140,6 +140,53 @@
 
     .detail-icon { font-size: 1rem; width: 1.4rem; text-align: center; flex-shrink: 0; }
 
+    /* 7-Tage Prognose */
+    .forecast {
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 0.25rem;
+    }
+
+    .forecast-day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
+      padding: 0.4rem 0.1rem;
+      border-radius: 10px;
+      transition: background 0.15s;
+    }
+    .forecast-day:hover { background: var(--bg); }
+
+    .fc-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+    .fc-label.today { color: var(--accent); }
+
+    .fc-icon { font-size: 1.3rem; line-height: 1; }
+
+    .fc-max {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .fc-min {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .fc-rain {
+      font-size: 0.65rem;
+      color: #0071e3;
+    }
+
     /* Skeleton loading */
     .skeleton {
       background: linear-gradient(90deg, #ebebeb 25%, #e0e0e0 50%, #ebebeb 75%);
@@ -219,11 +266,33 @@
     const url = `https://api.open-meteo.com/v1/forecast`
       + `?latitude=${loc.lat}&longitude=${loc.lon}`
       + `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day`
-      + `&daily=precipitation_probability_max`
-      + `&forecast_days=1&wind_speed_unit=kmh&timezone=auto`;
+      + `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max`
+      + `&forecast_days=7&wind_speed_unit=kmh&timezone=auto`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
+  }
+
+  const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+  function renderForecast(daily) {
+    return daily.time.map((dateStr, i) => {
+      const wmo = WMO[daily.weather_code[i]] || { day: '❓' };
+      const max = Math.round(daily.temperature_2m_max[i]);
+      const min = Math.round(daily.temperature_2m_min[i]);
+      const rain = daily.precipitation_probability_max[i] ?? 0;
+      const date = new Date(dateStr + 'T12:00:00');
+      const label = i === 0 ? 'Heute' : DAY_NAMES[date.getDay()];
+      const isToday = i === 0;
+      return `
+        <div class="forecast-day">
+          <span class="fc-label ${isToday ? 'today' : ''}">${label}</span>
+          <span class="fc-icon">${wmo.day}</span>
+          <span class="fc-max">${max}°</span>
+          <span class="fc-min">${min}°</span>
+          <span class="fc-rain">${rain > 0 ? rain + '%' : ''}</span>
+        </div>`;
+    }).join('');
   }
 
   function renderCard(loc, data) {
@@ -257,6 +326,7 @@
             <span>${rain}% Regenwahrscheinlichkeit</span>
           </div>
         </div>
+        <div class="forecast">${renderForecast(data.daily)}</div>
       </div>`;
   }
 

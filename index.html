@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wetter-Übersicht</title>
+  <style>
+    :root {
+      --bg: #f5f5f7;
+      --bg-card: #ffffff;
+      --text: #1d1d1f;
+      --text-secondary: #86868b;
+      --accent: #0071e3;
+      --border: #d2d2d7;
+      --radius: 18px;
+      --shadow: 0 2px 20px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2.5rem 1.5rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 0.2rem 0.75rem;
+      font-size: 0.8rem;
+      color: var(--accent);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .refresh-btn:hover { background: #f0f4ff; }
+    .refresh-btn:disabled { color: var(--text-secondary); cursor: default; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.75rem;
+      transition: transform 0.2s;
+    }
+    .card:hover { transform: translateY(-2px); }
+
+    .card-location {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 1.25rem;
+    }
+
+    .card-main {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 0.25rem;
+    }
+
+    .card-icon {
+      font-size: 3.25rem;
+      line-height: 1;
+    }
+
+    .card-temp-block { text-align: right; }
+
+    .card-temp {
+      font-size: 3.5rem;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .card-feels {
+      font-size: 0.825rem;
+      color: var(--text-secondary);
+      margin-top: 0.2rem;
+      text-align: right;
+    }
+
+    .card-condition {
+      font-size: 0.95rem;
+      color: var(--text);
+      margin-top: 0.5rem;
+      font-weight: 500;
+    }
+
+    .card-details {
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .detail-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .detail-icon { font-size: 1rem; width: 1.4rem; text-align: center; flex-shrink: 0; }
+
+    /* Skeleton loading */
+    .skeleton {
+      background: linear-gradient(90deg, #ebebeb 25%, #e0e0e0 50%, #ebebeb 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 8px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    .error-text { color: #ff3b30; font-size: 0.875rem; padding: 2rem 0; text-align: center; }
+
+    @media (max-width: 600px) {
+      h1 { font-size: 1.5rem; }
+      body { padding: 1.5rem 1rem; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Wetter-Übersicht</h1>
+  <div class="subtitle">
+    <span id="last-updated">Wird geladen…</span>
+    <button class="refresh-btn" id="refresh-btn" onclick="loadAll()">↻ Aktualisieren</button>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<script>
+  const LOCATIONS = [
+    { name: 'Mannersdorf a. d. Rabnitz', country: '🇦🇹', lat: 47.4167, lon: 16.5167 },
+    { name: 'Oberpullendorf', country: '🇦🇹', lat: 47.5017, lon: 16.5100 },
+    { name: 'Palma de Mallorca', country: '🇪🇸', lat: 39.5696, lon: 2.6502 },
+    { name: 'Monterosso al Mare', country: '🇮🇹', lat: 44.1462, lon: 9.6556 },
+    { name: 'Prag', country: '🇨🇿', lat: 50.0755, lon: 14.4378 },
+  ];
+
+  const WMO = {
+    0:  { text: 'Klarer Himmel',          day: '☀️',  night: '🌙' },
+    1:  { text: 'Überwiegend klar',        day: '🌤️', night: '🌙' },
+    2:  { text: 'Teilweise bewölkt',       day: '⛅',  night: '⛅' },
+    3:  { text: 'Bedeckt',                 day: '☁️',  night: '☁️' },
+    45: { text: 'Nebel',                   day: '🌫️', night: '🌫️' },
+    48: { text: 'Reifnebel',               day: '🌫️', night: '🌫️' },
+    51: { text: 'Leichter Nieselregen',    day: '🌦️', night: '🌧️' },
+    53: { text: 'Mäßiger Nieselregen',     day: '🌦️', night: '🌧️' },
+    55: { text: 'Starker Nieselregen',     day: '🌧️', night: '🌧️' },
+    61: { text: 'Leichter Regen',          day: '🌧️', night: '🌧️' },
+    63: { text: 'Mäßiger Regen',           day: '🌧️', night: '🌧️' },
+    65: { text: 'Starker Regen',           day: '🌧️', night: '🌧️' },
+    71: { text: 'Leichter Schneefall',     day: '❄️',  night: '❄️' },
+    73: { text: 'Mäßiger Schneefall',      day: '❄️',  night: '❄️' },
+    75: { text: 'Starker Schneefall',      day: '❄️',  night: '❄️' },
+    77: { text: 'Schneekörner',            day: '🌨️', night: '🌨️' },
+    80: { text: 'Leichte Regenschauer',    day: '🌦️', night: '🌧️' },
+    81: { text: 'Mäßige Regenschauer',     day: '🌧️', night: '🌧️' },
+    82: { text: 'Starke Regenschauer',     day: '⛈️',  night: '⛈️' },
+    85: { text: 'Leichte Schneeschauer',   day: '🌨️', night: '🌨️' },
+    86: { text: 'Starke Schneeschauer',    day: '🌨️', night: '🌨️' },
+    95: { text: 'Gewitter',               day: '⛈️',  night: '⛈️' },
+    96: { text: 'Gewitter mit Hagel',      day: '⛈️',  night: '⛈️' },
+    99: { text: 'Gewitter mit Hagel',      day: '⛈️',  night: '⛈️' },
+  };
+
+  const DIR_LABELS = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+
+  function windDir(deg) {
+    return DIR_LABELS[Math.round(deg / 22.5) % 16];
+  }
+
+  async function fetchWeather(loc) {
+    const url = `https://api.open-meteo.com/v1/forecast`
+      + `?latitude=${loc.lat}&longitude=${loc.lon}`
+      + `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day`
+      + `&daily=precipitation_probability_max`
+      + `&forecast_days=1&wind_speed_unit=kmh&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  function renderCard(loc, data) {
+    const c = data.current;
+    const wmo = WMO[c.weather_code] || { text: 'Unbekannt', day: '❓', night: '❓' };
+    const icon = c.is_day ? wmo.day : wmo.night;
+    const temp = Math.round(c.temperature_2m);
+    const feels = Math.round(c.apparent_temperature);
+    const wind = Math.round(c.wind_speed_10m);
+    const dir = windDir(c.wind_direction_10m);
+    const rain = data.daily.precipitation_probability_max[0] ?? '–';
+
+    return `
+      <div class="card">
+        <div class="card-location">${loc.country} ${loc.name}</div>
+        <div class="card-main">
+          <div class="card-icon">${icon}</div>
+          <div class="card-temp-block">
+            <div class="card-temp">${temp}°</div>
+            <div class="card-feels">Gefühlt ${feels}°C</div>
+          </div>
+        </div>
+        <div class="card-condition">${wmo.text}</div>
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-icon">💨</span>
+            <span>${wind} km/h aus ${dir}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-icon">🌧️</span>
+            <span>${rain}% Regenwahrscheinlichkeit</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderSkeleton(loc) {
+    return `
+      <div class="card">
+        <div class="card-location">${loc.country} ${loc.name}</div>
+        <div class="card-main">
+          <div class="skeleton" style="width:52px;height:52px;border-radius:50%"></div>
+          <div>
+            <div class="skeleton" style="width:80px;height:52px;margin-bottom:6px;border-radius:12px"></div>
+            <div class="skeleton" style="width:90px;height:14px;border-radius:6px"></div>
+          </div>
+        </div>
+        <div class="skeleton" style="width:150px;height:18px;margin-top:0.5rem;border-radius:6px"></div>
+        <div class="card-details">
+          <div class="skeleton" style="width:140px;height:16px;border-radius:6px"></div>
+          <div class="skeleton" style="width:180px;height:16px;border-radius:6px"></div>
+        </div>
+      </div>`;
+  }
+
+  async function loadAll() {
+    const grid = document.getElementById('grid');
+    const btn = document.getElementById('refresh-btn');
+    const info = document.getElementById('last-updated');
+
+    btn.disabled = true;
+    btn.textContent = '↻ Lädt…';
+    grid.innerHTML = LOCATIONS.map(renderSkeleton).join('');
+
+    const results = await Promise.allSettled(LOCATIONS.map(fetchWeather));
+
+    grid.innerHTML = results.map((r, i) => {
+      if (r.status === 'fulfilled') return renderCard(LOCATIONS[i], r.value);
+      return `
+        <div class="card">
+          <div class="card-location">${LOCATIONS[i].country} ${LOCATIONS[i].name}</div>
+          <div class="error-text">⚠️ Fehler beim Laden</div>
+        </div>`;
+    }).join('');
+
+    const now = new Date();
+    info.textContent = `Zuletzt: ${now.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+    btn.disabled = false;
+    btn.textContent = '↻ Aktualisieren';
+  }
+
+  loadAll();
+  setInterval(loadAll, 10 * 60 * 1000);
+</script>
+
+</body>
+</html>
